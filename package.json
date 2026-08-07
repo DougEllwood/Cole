@@ -1,0 +1,13 @@
+{
+  "name": "cole",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "tsx src/surfaces/server.ts"
+  },
+  "dependencies": {
+    "tsx": "^4.21.0"
+  }
+}

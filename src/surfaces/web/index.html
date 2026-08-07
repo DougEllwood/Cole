@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cole · Boots &amp; Hearts 2026</title>
+<style>
+  :root{
+    --bg:#f6f4ef; --ink:#2c2a26; --muted:#8a8278; --line:#e6e0d5;
+    --card:#fffdf9; --me:#eee7da; --accent:#7a6a53; --accent2:#b98b5e;
+    --shadow:0 1px 2px rgba(0,0,0,.04),0 10px 30px rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#151109; --ink:#ece7dc; --muted:#a89e8c; --line:#2e2820; --card:#211c14;
+      --me:#2a2318; --accent:#d3ba90; --accent2:#e0a86b; --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 36px rgba(0,0,0,.4);}
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .app{max-width:760px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;padding:0 16px}
+
+  header{display:flex;align-items:center;gap:14px;padding:18px 6px 14px;border-bottom:1px solid var(--line)}
+  .orb{width:52px;height:52px;border-radius:50%;flex:0 0 auto;position:relative;
+    background:radial-gradient(120% 120% at 30% 25%, #fff6e6 0%, var(--accent2) 42%, var(--accent) 78%);
+    box-shadow:0 6px 18px rgba(185,139,94,.4), inset 0 -6px 14px rgba(0,0,0,.15);animation:float 5s ease-in-out infinite}
+  .orb::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--accent2);opacity:0;transition:.2s}
+  .orb.listening::after{opacity:.7;animation:ring 1.3s ease-out infinite}
+  .orb.speaking{animation:pulse 1s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  @keyframes ring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.5);opacity:0}}
+  .who h1{font:600 20px/1 ui-serif,Georgia,serif;margin:0 0 3px}
+  .who p{margin:0;color:var(--muted);font-size:12.5px}
+  .badge{margin-left:auto;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:5px 10px;text-align:right}
+  .badge b{color:var(--accent)}
+
+  .log{flex:1;overflow-y:auto;padding:20px 4px;display:flex;flex-direction:column;gap:14px}
+  .row{display:flex;gap:10px;max-width:88%}
+  .row.me{align-self:flex-end;flex-direction:row-reverse}
+  .avatar{width:26px;height:26px;border-radius:50%;flex:0 0 auto;margin-top:3px;
+    background:radial-gradient(120% 120% at 30% 25%, #fff6e6, var(--accent2) 60%, var(--accent))}
+  .bubble{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:11px 15px;box-shadow:var(--shadow)}
+  .row.me .bubble{background:var(--me);border-color:transparent}
+  .bubble p{margin:0;white-space:pre-wrap}
+  .trace{margin-top:8px;font-size:11.5px;color:var(--muted);display:none}
+  .bubble.show-trace .trace{display:block}
+  .trace b{color:var(--accent2)}
+  .care{border-color:var(--accent2);box-shadow:0 0 0 2px rgba(185,139,94,.18),var(--shadow)}
+  .typing{font-size:13px;color:var(--muted);padding:2px 6px}
+
+  .composer{padding:12px 4px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+  .tools{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .tool{font-size:12.5px;color:var(--accent);background:transparent;border:1px solid var(--line);border-radius:999px;
+    padding:7px 12px;cursor:pointer;transition:.15s}
+  .tool:hover{background:rgba(122,106,83,.08)}
+  .tool.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .inbar{display:flex;gap:8px;align-items:flex-end}
+  textarea#msg{flex:1;resize:none;min-height:46px;max-height:140px;border:1px solid var(--line);border-radius:14px;
+    padding:12px 14px;background:var(--card);color:var(--ink);font:inherit;box-shadow:var(--shadow)}
+  textarea#msg:focus{outline:none;border-color:var(--accent2)}
+  .iconbtn{width:46px;height:46px;flex:0 0 auto;border-radius:14px;border:1px solid var(--line);background:var(--card);
+    cursor:pointer;font-size:19px;display:grid;place-items:center;box-shadow:var(--shadow)}
+  .iconbtn.send{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .iconbtn.mic.listening{background:var(--accent2);color:#fff;border-color:var(--accent2);animation:pulse 1s infinite}
+
+  /* drawer + modal */
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.32);opacity:0;pointer-events:none;transition:.2s;z-index:5}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .panel{position:fixed;top:0;right:0;height:100dvh;width:min(420px,92vw);background:var(--bg);border-left:1px solid var(--line);
+    transform:translateX(100%);transition:.25s;z-index:6;overflow-y:auto;padding:22px}
+  .panel.open{transform:none}
+  .panel h2{font:600 15px/1 ui-sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0 0 4px}
+  .panel .sub{color:var(--muted);font-size:12.5px;margin:0 0 18px}
+  .chap{font:600 18px/1.2 ui-serif,Georgia,serif;margin:22px 0 8px}
+  .jrny{font:700 11px/1 ui-sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--accent2);margin-top:20px}
+  .mcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0;box-shadow:var(--shadow)}
+  .mcard .why{font-weight:600;margin:0 0 4px}
+  .mcard .vn{font-style:italic;color:var(--ink);border-left:3px solid var(--accent2);padding-left:10px;margin:8px 0 0;background:rgba(185,139,94,.06)}
+  .mchips{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+  .mchip{font-size:10.5px;color:var(--accent);background:rgba(122,106,83,.1);border-radius:999px;padding:4px 8px}
+  .play{margin-top:10px;font-size:12px;color:var(--accent);background:transparent;border:1px solid var(--line);border-radius:999px;padding:6px 11px;cursor:pointer}
+  .field{margin:12px 0}
+  .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px}
+  .field input,.field textarea,.field select{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--card);color:var(--ink);font:inherit}
+  .basis{display:flex;gap:6px;flex-wrap:wrap}
+  .b{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:6px 11px;cursor:pointer;color:var(--muted)}
+  .b.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .primary{width:100%;margin-top:14px;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px;font:inherit;font-weight:600;cursor:pointer}
+  .ghost{width:100%;margin-top:8px;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:12px;padding:10px;cursor:pointer}
+  .note{font-size:12px;color:var(--muted);margin-top:8px}
+  .close{position:absolute;top:16px;right:16px;background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer}
+
+  /* Voice Mode — the "call" */
+  @keyframes vring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.6);opacity:0}}
+  @keyframes vpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  .voice{position:fixed;inset:0;z-index:30;display:none;flex-direction:column;align-items:center;justify-content:center;
+    padding:28px;text-align:center;color:#f3ece0;background:radial-gradient(120% 100% at 50% 18%, #2a2018, #14100a 70%)}
+  .voice.open{display:flex}
+  .vorb{width:150px;height:150px;border-radius:50%;position:relative;cursor:pointer;
+    background:radial-gradient(120% 120% at 30% 25%, #fff6e6, var(--accent2) 45%, var(--accent) 85%);
+    box-shadow:0 20px 60px rgba(185,139,94,.45), inset 0 -8px 20px rgba(0,0,0,.25)}
+  .vorb::after{content:"";position:absolute;inset:-16px;border-radius:50%;border:3px solid rgba(216,151,62,.6);opacity:0}
+  .voice[data-state="listening"] .vorb::after{opacity:1;animation:vring 1.4s ease-out infinite}
+  .voice[data-state="speaking"] .vorb{animation:vpulse 1s ease-in-out infinite}
+  .voice[data-state="thinking"] .vorb{filter:saturate(.7);opacity:.85}
+  .vstatus{margin-top:26px;font:600 13px/1 ui-sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--accent2)}
+  .vcaption{margin-top:16px;font:400 22px/1.45 ui-serif,Georgia,serif;max-width:30ch;min-height:2.4em;color:#f6efe3}
+  .vsub{margin-top:12px;color:#b9ad98;font-size:13px;max-width:32ch}
+  .vbtns{position:absolute;bottom:calc(36px + env(safe-area-inset-bottom));display:flex;gap:14px}
+  .vbtn{border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#f3ece0;border-radius:999px;padding:13px 22px;font:inherit;font-weight:600;cursor:pointer}
+  .vbtn.end{background:#b5566a;border-color:transparent}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="orb" id="orb"></div>
+    <div class="who"><h1 id="ivyName">Cole</h1><p>Boots &amp; Hearts 2026 · your festival buddy</p></div>
+    <div class="badge">🔒 private<br><b id="modelBadge">…</b></div>
+  </header>
+
+  <div class="log" id="log"></div>
+
+  <div class="composer">
+    <div class="tools">
+      <button class="tool" id="btnVoice">🎙️ Talk with Cole</button>
+      <button class="tool" id="btnMoment">✨ Keep a moment</button>
+      <button class="tool" id="btnStory">📖 My Story</button>
+      <button class="tool" id="btnSpeak">🔊 Cole speaks: off</button>
+      <button class="tool" id="btnTrace">🔎 Show trace</button>
+      <a class="tool" id="btnExport" href="/api/export">⬇ Export my data</a>
+    </div>
+    <div class="inbar">
+      <textarea id="msg" placeholder="Tell Cole how your day went…" rows="1"></textarea>
+      <button class="iconbtn mic" id="mic" title="Talk to Cole">🎙️</button>
+      <button class="iconbtn send" id="send" title="Send">➤</button>
+    </div>
+  </div>
+</div>
+
+<!-- Story drawer -->
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="story">
+  <button class="close" data-close>×</button>
+  <h2>The Story of Me</h2>
+  <p class="sub">Every journey deserves to be remembered.</p>
+  <div id="storyBody"></div>
+</aside>
+
+<!-- One Moment modal -->
+<aside class="panel" id="moment">
+  <button class="close" data-close>×</button>
+  <h2>One Moment</h2>
+  <p class="sub" id="momentPrompt">Was there one moment today that helped shape who you’re becoming?</p>
+  <div class="field"><label>Why did it matter?</label><textarea id="mWhy" rows="3" placeholder="The heart of it…"></textarea></div>
+  <div class="field"><label>It served…</label>
+    <div class="basis" id="mBasis">
+      <span class="b" data-b="growth">growth</span>
+      <span class="b" data-b="reflection">reflection</span>
+      <span class="b" data-b="gratitude">gratitude</span>
+      <span class="b" data-b="connection">connection</span>
+    </div>
+  </div>
+  <div class="field"><label>Chapter</label><input id="mChapter" list="chapters" placeholder="e.g. First Week" /></div>
+  <datalist id="chapters"></datalist>
+  <div class="field"><label>A voice note (optional) — in your own voice</label>
+    <textarea id="mVoice" rows="2" placeholder="Record below, or type a few words for the future you…"></textarea>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+      <button class="play" id="mRecord">● Record</button>
+      <audio id="mPreview" controls style="display:none;height:34px;max-width:100%"></audio>
+    </div>
+  </div>
+  <button class="primary" id="mSave">Keep this moment</button>
+  <p class="note" id="mNote"></p>
+</aside>
+
+<!-- Voice Mode -->
+<div class="voice" id="voice" data-state="idle">
+  <div class="vorb" id="vorb"></div>
+  <div class="vstatus" id="vstatus">Starting…</div>
+  <div class="vcaption" id="vcaption">Say hi to Cole…</div>
+  <div class="vsub">Just talk — she listens, then answers out loud. Tap the circle to speak right away.</div>
+  <div class="vbtns">
+    <button class="vbtn" id="vmute">Pause</button>
+    <button class="vbtn end" id="vend">End</button>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const log = $('#log'), orb = $('#orb');
+let speakOn = false, showTrace = false, voice = null, exchanges = 0;
+
+// ---------- voice output ----------
+function pickVoice(){
+  const vs = speechSynthesis.getVoices();
+  voice = vs.find(v => /female|samantha|zira|aria|jenny|libby|sonia|Google UK English Female/i.test(v.name))
+       || vs.find(v => /en[-_]/i.test(v.lang)) || vs[0] || null;
+}
+if ('speechSynthesis' in window){ speechSynthesis.onvoiceschanged = pickVoice; pickVoice(); }
+let currentAudio=null;
+function stopSpeaking(){ try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch(e){}
+  if(currentAudio){ try{currentAudio.pause()}catch(e){} currentAudio=null; } orb.classList.remove('speaking'); }
+// Speak with the server's lifelike voice (ElevenLabs) when available; otherwise
+// fall back to the browser voice. Resolves when finished.
+async function speakText(text){
+  stopSpeaking(); orb.classList.add('speaking');
+  try{
+    const r = await fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text})});
+    if(r.status===200){
+      const url=URL.createObjectURL(await r.blob());
+      await new Promise(res=>{ const a=new Audio(url); currentAudio=a; a.onended=()=>res(); a.onerror=()=>res(); a.play().catch(()=>res()); });
+      currentAudio=null; orb.classList.remove('speaking'); return;
+    }
+  }catch(e){}
+  await new Promise(res=>{ if(!('speechSynthesis' in window)){res();return;}
+    speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); if(voice)u.voice=voice; u.rate=1; u.pitch=1.06;
+    u.onend=()=>res(); u.onerror=()=>res(); speechSynthesis.speak(u); });
+  orb.classList.remove('speaking');
+}
+function speak(text){ if(!speakOn) return; speakText(text); }
+
+// ---------- rendering ----------
+function bubble(text, who, notes, care){
+  const row = document.createElement('div'); row.className = 'row ' + (who==='me'?'me':'ivy');
+  const av = document.createElement('div'); av.className='avatar'; if(who==='me') av.style.background='var(--muted)';
+  const b = document.createElement('div'); b.className='bubble' + (care?' care':'') + (showTrace?' show-trace':'');
+  const p = document.createElement('p'); p.textContent = text; b.appendChild(p);
+  if (notes && notes.length){
+    const t = document.createElement('div'); t.className='trace';
+    t.innerHTML = notes.map(n=>'· '+n.replace(/^(\w[\w -]*?):/,'<b>$1:</b>')).join('<br>');
+    b.appendChild(t);
+  }
+  row.appendChild(av); row.appendChild(b); log.appendChild(row); log.scrollTop = log.scrollHeight;
+  return b;
+}
+function typing(){ const r=document.createElement('div'); r.className='row ivy'; r.innerHTML='<div class="avatar"></div><div class="bubble"><div class="typing">Cole is thinking…</div></div>'; log.appendChild(r); log.scrollTop=log.scrollHeight; return r; }
+
+// ---------- API ----------
+async function api(path, opts){ const r = await fetch(path, opts); return r.json(); }
+
+async function sendMessage(text){
+  if (!text.trim()) return;
+  bubble(text,'me'); $('#msg').value=''; autosize();
+  const t = typing();
+  try{
+    const reply = await api('/api/say',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:text})});
+    t.remove();
+    bubble(reply.text,'ivy',reply.notes,reply.care);
+    speak(reply.text);
+    if (++exchanges === 3) setTimeout(()=>nudgeMoment(), 900);
+  }catch(e){ t.remove(); bubble('(I had trouble reaching the server just now.)','ivy'); }
+}
+function nudgeMoment(){
+  const b = bubble('Real quick — anything happen out there today you’ll actually wanna remember in five years? If so, let’s grab it before it turns into a blur.','ivy',['growth: the One Moment Rule']);
+  speak('Real quick — anything happen out there today you’ll actually wanna remember in five years?');
+}
+
+// ---------- voice input ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false;
+if (SR){
+  rec = new SR(); rec.lang='en-US'; rec.interimResults=true; rec.continuous=false;
+  rec.onresult = (e)=>{ let s=''; for(const r of e.results) s+=r[0].transcript; $('#msg').value=s; autosize();
+    if (e.results[e.results.length-1].isFinal){ stopListen(); sendMessage(s); } };
+  rec.onerror = stopListen; rec.onend = ()=>{ if(listening) stopListen(); };
+} else { $('#mic').style.display='none'; }
+function startListen(){ if(!rec) return; listening=true; $('#mic').classList.add('listening'); orb.classList.add('listening'); try{rec.start()}catch(e){} }
+function stopListen(){ listening=false; $('#mic').classList.remove('listening'); orb.classList.remove('listening'); try{rec.stop()}catch(e){} }
+$('#mic').onclick = ()=> listening ? stopListen() : startListen();
+
+// record a moment's voice note — REAL audio (MediaRecorder) + a transcript (speech-to-text)
+let recMoment=null;
+if (SR){ recMoment=new SR(); recMoment.lang='en-US'; recMoment.interimResults=true;
+  recMoment.onresult=(e)=>{ let s=''; for(const r of e.results) s+=r[0].transcript; $('#mVoice').value=s; }; }
+let mediaRec=null, recChunks=[], recordedBlob=null, recording=false;
+async function toggleRecord(){
+  const btn=$('#mRecord');
+  if(recording){ recording=false; btn.textContent='● Record'; btn.style.color='';
+    try{mediaRec&&mediaRec.stop()}catch(e){} try{recMoment&&recMoment.stop()}catch(e){} return; }
+  if(!navigator.mediaDevices || !window.MediaRecorder){ if(recMoment){try{recMoment.start()}catch(e){}} return; }
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    recChunks=[]; recordedBlob=null; mediaRec=new MediaRecorder(stream);
+    mediaRec.ondataavailable=(e)=>{ if(e.data && e.data.size) recChunks.push(e.data); };
+    mediaRec.onstop=()=>{ recordedBlob=new Blob(recChunks,{type:(mediaRec&&mediaRec.mimeType)||'audio/webm'});
+      const a=$('#mPreview'); a.src=URL.createObjectURL(recordedBlob); a.style.display='inline-block';
+      stream.getTracks().forEach(t=>t.stop()); };
+    mediaRec.start(); if(recMoment){try{recMoment.start()}catch(e){}}
+    recording=true; btn.textContent='■ Stop'; btn.style.color='var(--accent2)';
+  }catch(e){ if(recMoment){try{recMoment.start()}catch(e){}} }
+}
+$('#mRecord').onclick=toggleRecord;
+
+// ---------- composer ----------
+function autosize(){ const m=$('#msg'); m.style.height='auto'; m.style.height=Math.min(m.scrollHeight,140)+'px'; }
+$('#msg').addEventListener('input', autosize);
+$('#msg').addEventListener('keydown',(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage($('#msg').value); }});
+$('#send').onclick=()=> sendMessage($('#msg').value);
+$('#btnSpeak').onclick=(e)=>{ speakOn=!speakOn; e.target.classList.toggle('on',speakOn); e.target.textContent='🔊 Cole speaks: '+(speakOn?'on':'off'); if(speakOn && 'speechSynthesis' in window) pickVoice(); };
+$('#btnTrace').onclick=(e)=>{ showTrace=!showTrace; e.target.classList.toggle('on',showTrace); document.querySelectorAll('.bubble').forEach(b=>b.classList.toggle('show-trace',showTrace)); };
+
+// ---------- story drawer ----------
+function openPanel(id){ $('#scrim').classList.add('open'); $(id).classList.add('open'); }
+function closePanels(){ $('#scrim').classList.remove('open'); $('#story').classList.remove('open'); $('#moment').classList.remove('open'); }
+$('#scrim').onclick=closePanels; document.querySelectorAll('[data-close]').forEach(b=>b.onclick=closePanels);
+$('#btnStory').onclick=async()=>{ await renderStory(); openPanel('#story'); };
+async function renderStory(){
+  const {story}=await api('/api/story'); const host=$('#storyBody'); host.innerHTML='';
+  if(!story.length){ host.innerHTML='<p class="note">No moments kept yet. When one matters, keep it.</p>'; return; }
+  let lastJ=null;
+  for(const {chapter,moments} of story){
+    if(chapter.journey!==lastJ){ const j=document.createElement('div'); j.className='jrny'; j.textContent=chapter.journey; host.appendChild(j); lastJ=chapter.journey; }
+    const h=document.createElement('div'); h.className='chap'; h.textContent=chapter.title; host.appendChild(h);
+    for(const m of moments){
+      const c=document.createElement('div'); c.className='mcard';
+      c.innerHTML='<p class="why"></p>'+(m.voiceNoteText?'<p class="vn">🎤 “'+escapeHtml(m.voiceNoteText)+'”</p>':'')
+        +'<div class="mchips">'+m.covenantBasis.map(b=>'<span class="mchip">'+b+'</span>').join('')+'</div>';
+      c.querySelector('.why').textContent=m.whyItMattered;
+      if(m.voiceNoteRef){ // the person's REAL voice
+        const au=document.createElement('audio'); au.controls=true; au.preload='none';
+        au.src='/api/voicenote?ref='+encodeURIComponent(m.voiceNoteRef);
+        au.style.cssText='margin-top:10px;width:100%;height:36px';
+        const lbl=document.createElement('div'); lbl.className='note'; lbl.textContent='▶ your own voice';
+        c.appendChild(lbl); c.appendChild(au);
+      } else if(m.voiceNoteText){ const pb=document.createElement('button'); pb.className='play'; pb.textContent='▶ Hear it back';
+        pb.onclick=()=>{ const wasOn=speakOn; speakOn=true; speak(m.voiceNoteText); speakOn=wasOn; }; c.appendChild(pb); }
+      host.appendChild(c);
+    }
+  }
+}
+function escapeHtml(s){ return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// ---------- one moment modal ----------
+const basis=new Set();
+$('#mBasis').querySelectorAll('.b').forEach(el=>el.onclick=()=>{ const b=el.dataset.b; if(basis.has(b)){basis.delete(b);el.classList.remove('on');}else{basis.add(b);el.classList.add('on');} });
+$('#btnMoment').onclick=()=> openPanel('#moment');
+$('#mSave').onclick=async()=>{
+  const note=$('#mNote');
+  let voiceNoteRef;
+  if(recordedBlob){ note.textContent='saving your voice…';
+    try{ const r=await fetch('/api/voicenote',{method:'POST',headers:{'content-type':recordedBlob.type||'audio/webm'},body:recordedBlob});
+      voiceNoteRef=(await r.json()).ref; }catch(e){} }
+  const body={ whyItMattered:$('#mWhy').value, covenantBasis:[...basis], chapterTitle:$('#mChapter').value||'First Week', voiceNoteText:$('#mVoice').value, voiceNoteRef };
+  const res=await api('/api/moment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  if(res.ok){ note.textContent='✓ Kept. It’s part of your story now.'; setTimeout(()=>{ closePanels(); resetMoment(); },900); }
+  else { note.textContent='✗ '+res.reason; }
+};
+function resetMoment(){ $('#mWhy').value=''; $('#mVoice').value=''; $('#mChapter').value=''; basis.clear();
+  $('#mBasis').querySelectorAll('.b').forEach(e=>e.classList.remove('on')); $('#mNote').textContent='';
+  recordedBlob=null; const a=$('#mPreview'); a.style.display='none'; a.removeAttribute('src');
+  if(recording){ recording=false; $('#mRecord').textContent='● Record'; $('#mRecord').style.color=''; } }
+
+// ---------- init ----------
+(async function init(){
+  const s=await api('/api/state');
+  $('#ivyName').textContent=s.persona?.name||'Cole';
+  $('#modelBadge').textContent=s.model||'';
+  $('#momentPrompt').textContent=s.oneMomentPrompt||$('#momentPrompt').textContent;
+  $('#chapters').innerHTML=(s.chapters||[]).map(c=>'<option value="'+escapeHtml(c)+'">').join('');
+  bubble('Yo '+(s.name||'there')+'! I’m '+(s.persona?.name||'Cole')+', your Boots and Hearts wingman this weekend. So how’s it going out there — or are we already a mess?','ivy');
+  if (location.search.includes('demo')) runShowcase();
+})();
+
+// A scripted showcase (only when ?demo is in the URL) — for demos/screenshots.
+async function runShowcase(){
+  showTrace = true; $('#btnTrace').classList.add('on');
+  const lines = [
+    'Move-in day today. I’m excited… but honestly nervous.',
+    'How do I start making friends here? Should I join a club?'
+  ];
+  for (const line of lines){ await sendMessage(line); await new Promise(r=>setTimeout(r,700)); }
+}
+
+// ---------- Voice Mode: hands-free conversation (server voice → ElevenLabs, or browser voice) ----------
+const VM={active:false,paused:false,rec:null,speaking:false,finalText:''};
+function vSet(s,st){ $('#voice').dataset.state=s; if(st)$('#vstatus').textContent=st; }
+function openVoice(){ $('#voice').classList.add('open');
+  if(!SR){ vSet('idle','Voice needs Chrome or Safari'); $('#vcaption').textContent='Open this on your phone in Chrome or Safari to talk with Cole.'; return; }
+  VM.active=true; VM.paused=false; vmSay("Yo. How’s Boots and Hearts treating you — or are we already at ‘holding it together with vibes’?"); }
+function closeVoice(){ VM.active=false; vmStopRec(); stopSpeaking(); $('#voice').classList.remove('open'); }
+function vmStopRec(){ try{VM.rec&&VM.rec.abort()}catch(e){} VM.rec=null; }
+function vmStartRec(){ if(!SR||!VM.active||VM.paused||VM.speaking) return;
+  const r=new SR(); VM.rec=r; r.lang='en-US'; r.interimResults=true; r.continuous=false; VM.finalText='';
+  r.onstart=()=>{ if(!VM.speaking) vSet('listening','Listening'); };
+  r.onresult=e=>{ let i='',f=''; for(const x of e.results){ x.isFinal?f+=x[0].transcript:i+=x[0].transcript; } $('#vcaption').textContent=(f||i||'…'); if(f)VM.finalText=f; };
+  r.onerror=()=>{};
+  r.onend=()=>{ if(!VM.active||VM.paused)return; if(VM.finalText.trim()){ const t=VM.finalText.trim(); VM.finalText=''; vmHandle(t);} else setTimeout(vmStartRec,250); };
+  try{r.start()}catch(e){ setTimeout(vmStartRec,400); } }
+async function vmHandle(text){ bubble(text,'me'); vSet('thinking','Thinking'); $('#vcaption').textContent=text;
+  let out="I’m here.";
+  try{ const reply=await api('/api/say',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:text})});
+    bubble(reply.text,'ivy',reply.notes,reply.care); out=reply.text; }catch(e){ out="I had trouble hearing that — mind saying it again?"; }
+  vmSay(out); }
+async function vmSay(text){ $('#vcaption').textContent=text; vSet('speaking','Cole'); VM.speaking=true;
+  await speakText(text); VM.speaking=false; if(VM.active&&!VM.paused){ vSet('listening','Listening'); vmStartRec(); } }
+$('#vorb').onclick=()=>{ if(!VM.active)return; stopSpeaking(); VM.speaking=false; vSet('listening','Listening'); vmStartRec(); };
+$('#btnVoice').onclick=openVoice; $('#vend').onclick=closeVoice;
+$('#vmute').onclick=()=>{ VM.paused=!VM.paused; $('#vmute').textContent=VM.paused?'Resume':'Pause'; if(VM.paused){ vmStopRec(); stopSpeaking(); vSet('idle','Paused'); } else vmStartRec(); };
+</script>
+</body>
+</html>
