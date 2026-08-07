@@ -175,15 +175,14 @@
   <p class="note" id="mNote"></p>
 </aside>
 
-<!-- Voice Mode -->
+<!-- Voice Mode (the default home screen) -->
 <div class="voice" id="voice" data-state="idle">
   <div class="vorb" id="vorb"></div>
-  <div class="vstatus" id="vstatus">Starting…</div>
-  <div class="vcaption" id="vcaption">Say hi to Cole…</div>
-  <div class="vsub">Just talk — she listens, then answers out loud. Tap the circle to speak right away.</div>
+  <div class="vstatus" id="vstatus">Tap to start</div>
+  <div class="vcaption" id="vcaption">Tap anywhere to start talking with Cole</div>
+  <div class="vsub">Then just talk — he listens and answers out loud, back and forth. Tap the circle any time to jump in.</div>
   <div class="vbtns">
-    <button class="vbtn" id="vmute">Pause</button>
-    <button class="vbtn end" id="vend">End</button>
+    <button class="vbtn" id="vtext">⌨ Type instead</button>
   </div>
 </div>
 
@@ -360,6 +359,10 @@ function resetMoment(){ $('#mWhy').value=''; $('#mVoice').value=''; $('#mChapter
   $('#momentPrompt').textContent=s.oneMomentPrompt||$('#momentPrompt').textContent;
   $('#chapters').innerHTML=(s.chapters||[]).map(c=>'<option value="'+escapeHtml(c)+'">').join('');
   bubble('Yo '+(s.name||'there')+'! I’m '+(s.persona?.name||'Cole')+', your Boots and Hearts wingman this weekend. So how’s it going out there — or are we already a mess?','ivy');
+  // Voice-first: land straight on the call screen. One tap starts the live conversation.
+  $('#voice').classList.add('open'); $('#voice').dataset.state='idle';
+  $('#vstatus').textContent='Tap to start';
+  $('#vcaption').textContent='Tap anywhere to start talking with '+(s.persona?.name||'Cole');
   if (location.search.includes('demo')) runShowcase();
 })();
 
@@ -395,9 +398,15 @@ async function vmHandle(text){ bubble(text,'me'); vSet('thinking','Thinking'); $
   vmSay(out); }
 async function vmSay(text){ $('#vcaption').textContent=text; vSet('speaking','Cole'); VM.speaking=true;
   await speakText(text); VM.speaking=false; if(VM.active&&!VM.paused){ vSet('listening','Listening'); vmStartRec(); } }
-$('#vorb').onclick=()=>{ if(!VM.active)return; stopSpeaking(); VM.speaking=false; vSet('listening','Listening'); vmStartRec(); };
-$('#btnVoice').onclick=openVoice; $('#vend').onclick=closeVoice;
-$('#vmute').onclick=()=>{ VM.paused=!VM.paused; $('#vmute').textContent=VM.paused?'Resume':'Pause'; if(VM.paused){ vmStopRec(); stopSpeaking(); vSet('idle','Paused'); } else vmStartRec(); };
+// Tap the orb: when idle it starts the conversation; when live it lets you jump in.
+$('#vorb').onclick=(e)=>{ e.stopPropagation(); if(!VM.active){ openVoice(); return; }
+  stopSpeaking(); VM.speaking=false; vSet('listening','Listening'); vmStartRec(); };
+// Tapping ANYWHERE on the call screen starts it (browsers require one tap for mic + sound).
+$('#voice').addEventListener('click',(e)=>{ if(e.target.closest('#vtext')||e.target.closest('#vorb'))return; if(!VM.active) openVoice(); });
+// From the chat, this button jumps back into voice.
+$('#btnVoice').onclick=openVoice;
+// "Type instead" — drop out of voice into the text chat.
+$('#vtext').onclick=(e)=>{ e.stopPropagation(); closeVoice(); };
 </script>
 </body>
 </html>
