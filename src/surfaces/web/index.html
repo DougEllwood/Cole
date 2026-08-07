@@ -198,19 +198,40 @@ function pickVoice(){
        || vs.find(v => /en[-_]/i.test(v.lang)) || vs[0] || null;
 }
 if ('speechSynthesis' in window){ speechSynthesis.onvoiceschanged = pickVoice; pickVoice(); }
-let currentAudio=null;
+// ONE persistent audio player, reused for every line. This is the fix for
+// "greeting speaks but replies don't" on phones: iOS only keeps letting audio
+// through on the element you first played during the tap, so we must reuse it.
+const player = (typeof Audio !== 'undefined') ? new Audio() : null;
+if (player) { player.setAttribute('playsinline', ''); }
+let audioPrimed = false;
+// Called synchronously from the start tap — "unlocks" the player for later lines.
+function primeAudio(){
+  if(!player || audioPrimed) return; audioPrimed = true;
+  try{
+    player.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+    player.muted = true;
+    const p = player.play();
+    if (p && p.then) p.then(()=>{ try{player.pause();player.currentTime=0;}catch(e){} player.muted=false; }).catch(()=>{ player.muted=false; });
+    else player.muted = false;
+  }catch(e){ player.muted=false; }
+}
 function stopSpeaking(){ try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch(e){}
-  if(currentAudio){ try{currentAudio.pause()}catch(e){} currentAudio=null; } orb.classList.remove('speaking'); }
+  if(player){ try{ player.pause(); }catch(e){} } orb.classList.remove('speaking'); }
 // Speak with the server's lifelike voice (ElevenLabs) when available; otherwise
 // fall back to the browser voice. Resolves when finished.
 async function speakText(text){
   stopSpeaking(); orb.classList.add('speaking');
   try{
     const r = await fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text})});
-    if(r.status===200){
+    if(r.status===200 && player){
       const url=URL.createObjectURL(await r.blob());
-      await new Promise(res=>{ const a=new Audio(url); currentAudio=a; a.onended=()=>res(); a.onerror=()=>res(); a.play().catch(()=>res()); });
-      currentAudio=null; orb.classList.remove('speaking'); return;
+      await new Promise(res=>{
+        player.onended=()=>{ try{URL.revokeObjectURL(url)}catch(e){} res(); };
+        player.onerror=()=>res();
+        player.muted=false; player.src=url;
+        const p=player.play(); if(p && p.catch) p.catch(()=>res());
+      });
+      orb.classList.remove('speaking'); return;
     }
   }catch(e){}
   await new Promise(res=>{ if(!('speechSynthesis' in window)){res();return;}
@@ -376,34 +397,95 @@ async function runShowcase(){
   for (const line of lines){ await sendMessage(line); await new Promise(r=>setTimeout(r,700)); }
 }
 
-// ---------- Voice Mode: hands-free conversation (server voice → ElevenLabs, or browser voice) ----------
-const VM={active:false,paused:false,rec:null,speaking:false,finalText:''};
+// ---------- Voice Mode: hands-free conversation ----------
+// Listening = RECORD the person's audio (works reliably on iPhone) and send it to
+// the server, which transcribes it with ElevenLabs. We do NOT use the browser's
+// built-in speech recognition (Apple's is unreliable). A simple silence-detector
+// ends each turn so it stays hands-free. Tap the circle any time to send/re-listen.
+const VM = { active:false, speaking:false, listening:false, stream:null, ac:null, analyser:null, rec:null, chunks:[], raf:0, spoke:false };
 function vSet(s,st){ $('#voice').dataset.state=s; if(st)$('#vstatus').textContent=st; }
-function openVoice(){ $('#voice').classList.add('open');
-  if(!SR){ vSet('idle','Voice needs Chrome or Safari'); $('#vcaption').textContent='Open this on your phone in Chrome or Safari to talk with Cole.'; return; }
-  VM.active=true; VM.paused=false; vmSay("Yo. How’s Boots and Hearts treating you — or are we already at ‘holding it together with vibes’?"); }
-function closeVoice(){ VM.active=false; vmStopRec(); stopSpeaking(); $('#voice').classList.remove('open'); }
-function vmStopRec(){ try{VM.rec&&VM.rec.abort()}catch(e){} VM.rec=null; }
-function vmStartRec(){ if(!SR||!VM.active||VM.paused||VM.speaking) return;
-  const r=new SR(); VM.rec=r; r.lang='en-US'; r.interimResults=true; r.continuous=false; VM.finalText='';
-  r.onstart=()=>{ if(!VM.speaking) vSet('listening','Listening'); };
-  r.onresult=e=>{ let i='',f=''; for(const x of e.results){ x.isFinal?f+=x[0].transcript:i+=x[0].transcript; } $('#vcaption').textContent=(f||i||'…'); if(f)VM.finalText=f; };
-  r.onerror=()=>{};
-  r.onend=()=>{ if(!VM.active||VM.paused)return; if(VM.finalText.trim()){ const t=VM.finalText.trim(); VM.finalText=''; vmHandle(t);} else setTimeout(vmStartRec,250); };
-  try{r.start()}catch(e){ setTimeout(vmStartRec,400); } }
-async function vmHandle(text){ bubble(text,'me'); vSet('thinking','Thinking'); $('#vcaption').textContent=text;
+
+async function openVoice(){
+  primeAudio(); $('#voice').classList.add('open');
+  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)){
+    vSet('idle','Voice needs a newer browser'); $('#vcaption').textContent='Tap “Type instead” to chat with Cole.'; return; }
+  VM.active=true;
+  // Grab the mic + audio meter now, while the tap still counts as permission.
+  try{
+    if(!VM.stream) VM.stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    if(!VM.ac) VM.ac = new (window.AudioContext||window.webkitAudioContext)();
+    if(VM.ac.state==='suspended') { try{ await VM.ac.resume(); }catch(e){} }
+    if(!VM.analyser){ const src=VM.ac.createMediaStreamSource(VM.stream); VM.analyser=VM.ac.createAnalyser(); VM.analyser.fftSize=1024; src.connect(VM.analyser); }
+  }catch(e){ vSet('idle','Mic blocked'); $('#vcaption').textContent='Allow the microphone, or tap “Type instead”.'; return; }
+  vmSay("Yo. How’s Boots and Hearts treating you — or are we already at ‘holding it together with vibes’?");
+}
+function closeVoice(){ VM.active=false; stopListening(true); stopSpeaking(); $('#voice').classList.remove('open'); }
+
+async function vmSay(text){
+  $('#vcaption').textContent=text; vSet('speaking','Cole'); VM.speaking=true;
+  await speakText(text); VM.speaking=false;
+  if(VM.active) startListening();
+}
+async function vmHandle(text){
+  bubble(text,'me'); vSet('thinking','Thinking'); $('#vcaption').textContent=text;
   let out="I’m here.";
   try{ const reply=await api('/api/say',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:text})});
-    bubble(reply.text,'ivy',reply.notes,reply.care); out=reply.text; }catch(e){ out="I had trouble hearing that — mind saying it again?"; }
-  vmSay(out); }
-async function vmSay(text){ $('#vcaption').textContent=text; vSet('speaking','Cole'); VM.speaking=true;
-  await speakText(text); VM.speaking=false; if(VM.active&&!VM.paused){ vSet('listening','Listening'); vmStartRec(); } }
-// Tap the orb: when idle it starts the conversation; when live it lets you jump in.
-$('#vorb').onclick=(e)=>{ e.stopPropagation(); if(!VM.active){ openVoice(); return; }
-  stopSpeaking(); VM.speaking=false; vSet('listening','Listening'); vmStartRec(); };
-// Tapping ANYWHERE on the call screen starts it (browsers require one tap for mic + sound).
+    bubble(reply.text,'ivy',reply.notes,reply.care); out=reply.text; }catch(e){ out="Lost you for a sec — say that again?"; }
+  vmSay(out);
+}
+
+// Record a turn; auto-stop when the person goes quiet.
+function startListening(){
+  if(!VM.active || VM.speaking || VM.listening || !VM.stream) return;
+  VM.listening=true; VM.spoke=false; VM.chunks=[];
+  vSet('listening','Listening'); $('#vcaption').textContent='Listening…';
+  let rec; try{ rec=new MediaRecorder(VM.stream); }catch(e){ VM.listening=false; return; }
+  VM.rec=rec;
+  rec.ondataavailable=(e)=>{ if(e.data && e.data.size) VM.chunks.push(e.data); };
+  rec.onstop=()=>onTurnRecorded();
+  try{ rec.start(); }catch(e){ VM.listening=false; return; }
+
+  const buf = VM.analyser ? new Uint8Array(VM.analyser.fftSize) : null;
+  const started=Date.now(); let lastLoud=Date.now();
+  const SIL=1100, MAXTURN=18000, NOSPEECH=8000, THRESH=0.045;
+  const loop=()=>{
+    if(!VM.listening) return;
+    let level=0;
+    if(VM.analyser && buf){ VM.analyser.getByteTimeDomainData(buf);
+      let sum=0; for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; } level=Math.sqrt(sum/buf.length); }
+    const now=Date.now();
+    if(level>THRESH){ VM.spoke=true; lastLoud=now; }
+    const done = (VM.spoke && now-lastLoud>SIL) || (now-started>MAXTURN) || (!VM.spoke && now-started>NOSPEECH);
+    if(done){ stopRecorder(); return; }
+    VM.raf=requestAnimationFrame(loop);
+  };
+  VM.raf=requestAnimationFrame(loop);
+}
+function stopRecorder(){ cancelAnimationFrame(VM.raf); try{ if(VM.rec && VM.rec.state!=='inactive') VM.rec.stop(); }catch(e){} }
+function stopListening(hard){ VM.listening=false; cancelAnimationFrame(VM.raf);
+  try{ if(VM.rec && VM.rec.state!=='inactive') VM.rec.stop(); }catch(e){}
+  if(hard && VM.stream){ try{ VM.stream.getTracks().forEach(t=>t.stop()); }catch(e){} VM.stream=null; VM.analyser=null; } }
+
+async function onTurnRecorded(){
+  VM.listening=false;
+  const blob=new Blob(VM.chunks,{type:(VM.rec&&VM.rec.mimeType)||'audio/webm'});
+  if(!VM.spoke || blob.size<1500){ if(VM.active) startListening(); return; }  // nothing said — keep listening
+  vSet('thinking','…'); $('#vcaption').textContent='…';
+  try{
+    const r=await fetch('/api/stt',{method:'POST',headers:{'content-type':blob.type||'audio/webm'},body:blob});
+    const j=await r.json(); const text=((j&&j.text)||'').trim();
+    if(text) vmHandle(text); else if(VM.active) startListening();
+  }catch(e){ if(VM.active) startListening(); }
+}
+
+// Tap the orb: idle → start; speaking → cut in; listening → "I'm done, send it".
+$('#vorb').onclick=(e)=>{ e.stopPropagation();
+  if(!VM.active){ openVoice(); return; }
+  if(VM.speaking){ stopSpeaking(); VM.speaking=false; startListening(); return; }
+  if(VM.listening){ stopRecorder(); } else { startListening(); } };
+// Tapping anywhere on the call screen starts it (one tap unlocks mic + sound).
 $('#voice').addEventListener('click',(e)=>{ if(e.target.closest('#vtext')||e.target.closest('#vorb'))return; if(!VM.active) openVoice(); });
-// From the chat, this button jumps back into voice.
+// From the chat, jump back into voice.
 $('#btnVoice').onclick=openVoice;
 // "Type instead" — drop out of voice into the text chat.
 $('#vtext').onclick=(e)=>{ e.stopPropagation(); closeVoice(); };

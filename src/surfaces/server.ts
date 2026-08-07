@@ -14,6 +14,7 @@ import { CAMPUS_CONFIG } from '../navigators/campus/config';
 import { buildStores } from '../kernel/storeFactory';
 import { buildGateway, activeModelDescription } from '../intelligence/buildGateway';
 import { buildVoice } from '../intelligence/voice';
+import { buildStt } from '../intelligence/stt';
 import type { Journey } from '../shared/types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,7 @@ const dataDir = join(process.cwd(), 'data');
 const stores = await buildStores(dataDir); // top-level await (ESM)
 const os = new NavigatorOS(undefined, buildGateway(), stores.events, stores.blobs).registerVertical(CAMPUS_CONFIG);
 const voice = buildVoice();
+const stt = buildStt();
 
 // Onboard Kane once (first run), and open a first chapter.
 if (os.exportPerson(PERSON).events.length === 0) {
@@ -80,6 +82,14 @@ const server = createServer(async (req, res) => {
         voice: voice.describe(),
         chapters: os.story(PERSON).map((s) => s.chapter.title),
       });
+    }
+
+    if (req.method === 'POST' && path === '/api/stt') {
+      const contentType = String(req.headers['content-type'] || 'audio/webm');
+      const bytes = await readRawBody(req);
+      if (!bytes.length) return send(res, 400, { error: 'no audio' });
+      const text = await stt.transcribe(bytes, contentType);
+      return send(res, 200, { text: text ?? '' });
     }
 
     if (req.method === 'POST' && path === '/api/tts') {
@@ -154,5 +164,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  ▶ http://localhost:${PORT}`);
   console.log(`  model:   ${activeModelDescription()}`);
   console.log(`  voice:   ${voice.describe()}`);
+  console.log(`  hearing: ${stt.describe()}`);
   console.log(`  storage: ${stores.backend}\n`);
 });
