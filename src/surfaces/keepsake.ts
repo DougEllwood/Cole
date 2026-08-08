@@ -90,7 +90,6 @@ function titleFor(c: Convo): string {
   return words.length < src.replace(/\s+/g, ' ').trim().length ? words + '…' : words;
 }
 
-const HIGHLIGHT_RE = /\b(best|unreal|amazing|incredible|epic|favou?rite|loved?|so good|unbelievable|insane|never forget(ting)?|the best|greatest|wild|perfect)\b/i;
 
 // ---- render ----
 function renderPage(convos: Convo[], opts: { eventTitle: string; chapter: string; subtitle: string; tagline?: string; edit?: boolean }): string {
@@ -108,19 +107,6 @@ function renderPage(convos: Convo[], opts: { eventTitle: string; chapter: string
     byDay.get(k)!.push(c);
   }
   const dayNames = ['', 'Day One', 'Day Two', 'Day Three', 'Day Four', 'Day Five', 'Day Six', 'Day Seven'];
-
-  // highlights — Kane's own standout lines (real text only)
-  const highlights: Array<{ msg: string; unix: number }> = [];
-  for (const c of withText) for (const t of c.turns) {
-    if (t.role === 'user' && HIGHLIGHT_RE.test(t.message) && t.message.length >= 8 && t.message.length <= 160) {
-      highlights.push({ msg: t.message, unix: c.startUnix });
-    }
-  }
-  const topHighlights = highlights.slice(0, 4);
-  const highlightsHtml = topHighlights.length
-    ? `<h2>In Kane's words</h2><div class="hls">${topHighlights.map((h) =>
-        `<div class="hl"><p class="hq">“${esc(h.msg)}”</p>${h.unix ? `<span class="hd">${esc(fmtDay(h.unix))}</span>` : ''}</div>`).join('')}</div>`
-    : '';
 
   let n = 0;
   const navLinks: string[] = [];
@@ -244,7 +230,6 @@ ${edit ? `<div class="editbar"><b>Edit mode.</b> Tap <b>Remove</b> on anything t
     ${tagline ? `<div class="tag">${esc(tagline)}</div>` : ''}
     <div class="rule"></div>
   </div>
-  ${highlightsHtml}
   ${daysHtml}${empty}
   <div class="foot"><div class="m1">"Never give up."</div><div class="m2">The Story of Me</div></div>
 </div>
