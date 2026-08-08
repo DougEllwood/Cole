@@ -222,7 +222,7 @@ ${nav}
   </div>
   ${highlightsHtml}
   ${daysHtml}${empty}
-  <div class="foot"><div class="m1">"Every journey deserves to be remembered."</div><div class="m2">The Story of Me</div></div>
+  <div class="foot"><div class="m1">"Never give up."</div><div class="m2">The Story of Me</div></div>
 </div></body></html>`;
 }
 
@@ -260,10 +260,9 @@ ${esc(lines || '  (none)')}
   }
 
   try {
-    // Prefer the configured agent; if that yields nothing, fall back to account-wide
-    // so Kane's chats still show even if the agent id differs slightly.
-    let ids = await listConversations(key, agentId);
-    if (ids.length === 0) ids = await listConversations(key, null);
+    // Include every Cole conversation across the account (both agents) so none of
+    // Kane's chats are left out.
+    const ids = await listConversations(key, null);
     const convos: Convo[] = [];
     for (const it of ids) {
       const c = await getConversation(key, it.id, it.startUnix);
