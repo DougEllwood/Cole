@@ -15,6 +15,7 @@ import { buildStores } from '../kernel/storeFactory';
 import { buildGateway, activeModelDescription } from '../intelligence/buildGateway';
 import { buildVoice } from '../intelligence/voice';
 import { buildStt } from '../intelligence/stt';
+import { buildKeepsakeHTML } from './keepsake';
 import type { Journey } from '../shared/types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -67,6 +68,12 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && (path === '/' || path === '/index.html')) {
       return send(res, 200, readFileSync(join(HERE, 'web', 'index.html'), 'utf8'), 'text/html; charset=utf-8');
+    }
+
+    // The Story of Kane — a personal copy of the event, organized by title and date.
+    if (req.method === 'GET' && (path === '/keepsake' || path === '/keepsake.html')) {
+      const html = await buildKeepsakeHTML();
+      return send(res, 200, html, 'text/html; charset=utf-8');
     }
 
     if (req.method === 'GET' && path === '/api/state') {
