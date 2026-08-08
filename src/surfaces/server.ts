@@ -72,7 +72,8 @@ const server = createServer(async (req, res) => {
 
     // The Story of Kane — a personal copy of the event, organized by title and date.
     if (req.method === 'GET' && (path === '/keepsake' || path === '/keepsake.html')) {
-      const html = await buildKeepsakeHTML();
+      const debug = url.searchParams.get('debug') === '1';
+      const html = await buildKeepsakeHTML({ debug });
       return send(res, 200, html, 'text/html; charset=utf-8');
     }
 
