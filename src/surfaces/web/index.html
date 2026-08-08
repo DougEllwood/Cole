@@ -46,5 +46,44 @@
 
     <p class="foot">Have fun. Look out for your crew. 💛</p>
   </div>
+
+  <script>
+  (function(){
+    // Kane's memory — the server fills this in with what Cole should remember.
+    var KANE_MEMORY = "__KANE_MEMORY__";
+
+    // A fresh opener every time — dry, festival, the odd dad joke from Cole's old man.
+    var GREETINGS = [
+      "Yo. My dad's one festival rule: hydrate or die-drate. So… you drinking water or living dangerously?",
+      "Alright Kane. Dad joke my old man left me with: I only know 25 letters of the alphabet — I don't know y. Anyway, you still alive out there?",
+      "Oh good, you're back. I was starting to think you made real friends. How's it going?",
+      "Hey. Running on zero sleep and one questionable corn dog over here. What's the damage at your camp?",
+      "Yo. Vibe check — are we 'main character' today, or 'lying in the tent questioning every decision'?",
+      "Kane. Why don't skeletons crowd-surf? No guts. …I'll show myself out. How's the day treating you?",
+      "Hey. Statistically one of your tent-mates snores like a dying moose. Figured out who yet?",
+      "Alright. On a scale of 'fresh' to 'full feral' — where's the crew landing today?",
+      "Yo. My dad says never trust a port-a-potty with a shorter line than the bar. How you holding up?",
+      "Had a dream you drank a full water yesterday. Wild stuff. How we doing out there?",
+      "Hey Kane. Dad told me: I'm reading a book on anti-gravity — impossible to put down. Ok, your turn, how's it going?",
+      "Yo. Two questions: did you eat today, and is that a real answer? Talk to me.",
+      "Back at it. Warn me now — are we celebrating something or recovering from something?",
+      "Hey. My old man says a good weekend is measured in stories, not photos. Give me one — what happened?"
+    ];
+    function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+
+    var w = document.querySelector('elevenlabs-convai');
+    if (w) {
+      w.addEventListener('elevenlabs-convai:call', function(e){
+        try{
+          e.detail = e.detail || {}; e.detail.config = e.detail.config || {};
+          var dv = e.detail.config.dynamicVariables || {};
+          dv.kane_memory = KANE_MEMORY || 'nothing yet';
+          dv.opening = pick(GREETINGS);
+          e.detail.config.dynamicVariables = dv;
+        }catch(err){}
+      });
+    }
+  })();
+  </script>
 </body>
 </html>

@@ -51,6 +51,51 @@ async function getConversation(key: string, id: string, fallbackStart: number): 
   return { id, startUnix, turns };
 }
 
+// ---- Kane's memory ----
+// A compact digest of what Cole should remember about Kane, built from past chats.
+// Cached in memory and refreshed in the background so it never slows a page load.
+let _mem: { text: string; ts: number } | null = null;
+const MEM_TTL = 5 * 60 * 1000; // 5 minutes
+
+export function getKaneMemoryFast(): string {
+  return _mem?.text ?? '';
+}
+export function memoryIsStale(): boolean {
+  return !_mem || Date.now() - _mem.ts > MEM_TTL;
+}
+export async function refreshKaneMemory(): Promise<string> {
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) { _mem = { text: '', ts: Date.now() }; return ''; }
+  try {
+    const ids = (await listConversations(key, null)).sort((a, b) => b.startUnix - a.startUnix).slice(0, 14);
+    const picked: string[] = [];
+    const seen = new Set<string>();
+    for (const it of ids) {
+      const c = await getConversation(key, it.id, it.startUnix);
+      if (!c) continue;
+      for (const t of c.turns) {
+        if (t.role !== 'user') continue;
+        const m = t.message.trim();
+        if (m.length < 4) continue;
+        const k = m.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        picked.push(m);
+      }
+      if (picked.length >= 30) break;
+    }
+    let text = picked.length
+      ? 'Things Kane has told you in earlier chats (most recent first — weave in naturally, do not read aloud):\n- ' + picked.slice(0, 30).join('\n- ')
+      : '';
+    if (text.length > 2200) text = text.slice(0, 2200) + '…';
+    _mem = { text, ts: Date.now() };
+    return text;
+  } catch {
+    if (!_mem) _mem = { text: '', ts: Date.now() };
+    return _mem.text;
+  }
+}
+
 // Permanently delete a conversation from ElevenLabs (used by the keepsake's edit mode).
 export async function deleteConversation(id: string): Promise<{ ok: boolean; error?: string }> {
   const key = process.env.ELEVENLABS_API_KEY;

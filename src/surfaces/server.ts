@@ -15,7 +15,7 @@ import { buildStores } from '../kernel/storeFactory';
 import { buildGateway, activeModelDescription } from '../intelligence/buildGateway';
 import { buildVoice } from '../intelligence/voice';
 import { buildStt } from '../intelligence/stt';
-import { buildKeepsakeHTML, deleteConversation } from './keepsake';
+import { buildKeepsakeHTML, deleteConversation, getKaneMemoryFast, memoryIsStale, refreshKaneMemory } from './keepsake';
 import type { Journey } from '../shared/types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -67,7 +67,17 @@ const server = createServer(async (req, res) => {
   const path = url.pathname;
   try {
     if (req.method === 'GET' && (path === '/' || path === '/index.html')) {
-      return send(res, 200, readFileSync(join(HERE, 'web', 'index.html'), 'utf8'), 'text/html; charset=utf-8');
+      let html = readFileSync(join(HERE, 'web', 'index.html'), 'utf8');
+      // Hand Cole the latest memory of Kane (never blocks the page — refresh runs in background).
+      html = html.replace('"__KANE_MEMORY__"', JSON.stringify(getKaneMemoryFast()));
+      if (memoryIsStale()) refreshKaneMemory().catch(() => {});
+      return send(res, 200, html, 'text/html; charset=utf-8');
+    }
+
+    // Peek at what Cole currently remembers about Kane (for checking).
+    if (req.method === 'GET' && path === '/api/memory') {
+      if (memoryIsStale()) await refreshKaneMemory();
+      return send(res, 200, { memory: getKaneMemoryFast() });
     }
 
     // The Story of Kane — a personal copy of the event, organized by title and date.
@@ -183,4 +193,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  voice:   ${voice.describe()}`);
   console.log(`  hearing: ${stt.describe()}`);
   console.log(`  storage: ${stores.backend}\n`);
+  refreshKaneMemory().then((m) => console.log(`  memory:  ${m ? "loaded Kane's memory" : 'no memory yet'}`)).catch(() => {});
 });
