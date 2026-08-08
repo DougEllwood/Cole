@@ -15,7 +15,7 @@ import { buildStores } from '../kernel/storeFactory';
 import { buildGateway, activeModelDescription } from '../intelligence/buildGateway';
 import { buildVoice } from '../intelligence/voice';
 import { buildStt } from '../intelligence/stt';
-import { buildKeepsakeHTML } from './keepsake';
+import { buildKeepsakeHTML, deleteConversation } from './keepsake';
 import type { Journey } from '../shared/types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -73,8 +73,17 @@ const server = createServer(async (req, res) => {
     // The Story of Kane — a personal copy of the event, organized by title and date.
     if (req.method === 'GET' && (path === '/keepsake' || path === '/keepsake.html')) {
       const debug = url.searchParams.get('debug') === '1';
-      const html = await buildKeepsakeHTML({ debug });
+      const edit = url.searchParams.get('edit') === '1';
+      const html = await buildKeepsakeHTML({ debug, edit });
       return send(res, 200, html, 'text/html; charset=utf-8');
+    }
+
+    // Remove a single conversation (used by the keepsake edit mode).
+    if (req.method === 'POST' && path === '/api/keepsake/delete') {
+      const { id } = await readBody(req);
+      if (!id) return send(res, 400, { ok: false, error: 'no id' });
+      const result = await deleteConversation(String(id));
+      return send(res, result.ok ? 200 : 502, result);
     }
 
     if (req.method === 'GET' && path === '/api/state') {

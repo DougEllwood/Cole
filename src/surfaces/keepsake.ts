@@ -51,6 +51,20 @@ async function getConversation(key: string, id: string, fallbackStart: number): 
   return { id, startUnix, turns };
 }
 
+// Permanently delete a conversation from ElevenLabs (used by the keepsake's edit mode).
+export async function deleteConversation(id: string): Promise<{ ok: boolean; error?: string }> {
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) return { ok: false, error: 'no key' };
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) return { ok: false, error: 'bad id' };
+  try {
+    const res = await fetch(new URL(`/v1/convai/conversations/${id}`, API), { method: 'DELETE', headers: { 'xi-api-key': key } });
+    if (!res.ok) return { ok: false, error: `status ${res.status}` };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String((err as Error).message ?? err) };
+  }
+}
+
 // ---- grouping & titling ----
 const TZ = 'America/Toronto';
 function dayKey(unix: number): string {
@@ -79,7 +93,8 @@ function titleFor(c: Convo): string {
 const HIGHLIGHT_RE = /\b(best|unreal|amazing|incredible|epic|favou?rite|loved?|so good|unbelievable|insane|never forget(ting)?|the best|greatest|wild|perfect)\b/i;
 
 // ---- render ----
-function renderPage(convos: Convo[], opts: { eventTitle: string; chapter: string; subtitle: string; tagline?: string }): string {
+function renderPage(convos: Convo[], opts: { eventTitle: string; chapter: string; subtitle: string; tagline?: string; edit?: boolean }): string {
+  const edit = !!opts.edit;
   const withText = convos.filter((c) => c.turns.length > 0).sort((a, b) => a.startUnix - b.startUnix);
   const dated = withText.filter((c) => c.startUnix);
   const first = dated[0]?.startUnix ?? 0;
@@ -123,7 +138,8 @@ function renderPage(convos: Convo[], opts: { eventTitle: string; chapter: string
       }).join('');
       const when = c.startUnix ? fmtTime(c.startUnix) : '';
       const count = c.turns.length;
-      return `<details class="conv" open><summary class="chd"><span class="ct">${esc(titleFor(c))}</span><span class="cw">${when} · ${count} lines</span></summary>${turns}</details>`;
+      const rm = edit ? `<button class="rm" data-id="${esc(c.id)}" onclick="rmConv(this)">Remove</button>` : '';
+      return `<details class="conv" open data-id="${esc(c.id)}"><summary class="chd"><span class="ct">${esc(titleFor(c))}</span><span class="cw">${when} · ${count} lines${rm}</span></summary>${turns}</details>`;
     }).join('');
     return `<section id="${id}"><h2>${label}</h2><div class="day">${dayLabel}</div>${cards}</section>`;
   }).join('');
@@ -162,6 +178,13 @@ function renderPage(convos: Convo[], opts: { eventTitle: string; chapter: string
   .pdf{ font:inherit; font-size:13px; border:1px solid var(--gold); color:var(--goldd); background:#fff;
     border-radius:999px; padding:5px 14px; cursor:pointer; }
   .pdf:hover{ background:#fbeed3; }
+  .editbar{ max-width:760px; margin:14px auto 0; padding:12px 16px; background:#fdf1d8; border:1px solid #f0dca9;
+    border-radius:12px; font-family:-apple-system,Segoe UI,Roboto,sans-serif; font-size:14px; color:#7a5410; }
+  .editbar b{ color:#5a3d0a; } .editbar a{ color:#a76d1e; }
+  .rm{ font:inherit; font-family:-apple-system,Segoe UI,Roboto,sans-serif; font-size:12px; margin-left:10px;
+    border:1px solid #d98a8a; color:#a23c3c; background:#fff; border-radius:999px; padding:3px 12px; cursor:pointer; }
+  .rm:hover{ background:#fdeaea; }
+  .rm:disabled{ opacity:.5; }
   .page{ max-width:760px; margin:0 auto; padding:40px 26px 80px; }
   .cover{ text-align:center; padding:6px 0 34px; border-bottom:1px solid var(--line); }
   .wordmark{ font-family:-apple-system,Segoe UI,Roboto,sans-serif; font-weight:800; font-size:30px; letter-spacing:.28em;
@@ -209,6 +232,7 @@ function renderPage(convos: Convo[], opts: { eventTitle: string; chapter: string
   @media print{ .nav{ display:none; } body{ background:#fff; } .conv,.hl{ box-shadow:none; } .conv{ break-inside:avoid; } }
 </style></head><body>
 ${nav}
+${edit ? `<div class="editbar"><b>Edit mode.</b> Tap <b>Remove</b> on anything that isn't Kane — it's deleted for good. When you're done, open the <a href="/keepsake">normal keepsake</a> to read, share or print.</div>` : ''}
 <div class="page">
   <div class="cover">
     <div class="wordmark">COLE</div>
@@ -223,11 +247,24 @@ ${nav}
   ${highlightsHtml}
   ${daysHtml}${empty}
   <div class="foot"><div class="m1">"Never give up."</div><div class="m2">The Story of Me</div></div>
-</div></body></html>`;
+</div>
+${edit ? `<script>
+async function rmConv(btn){
+  if(!confirm('Remove this conversation for good? It will be deleted from ElevenLabs too.')) return;
+  btn.disabled=true; btn.textContent='Removing…';
+  try{
+    const r=await fetch('/api/keepsake/delete',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:btn.dataset.id})});
+    const j=await r.json();
+    if(j&&j.ok){ var card=btn.closest('.conv'); if(card){ card.style.transition='opacity .3s'; card.style.opacity='0'; setTimeout(function(){card.remove();},300); } }
+    else { btn.disabled=false; btn.textContent='Remove'; alert('Could not remove it: '+((j&&j.error)||'unknown')); }
+  }catch(e){ btn.disabled=false; btn.textContent='Remove'; alert('Could not remove it.'); }
+}
+</script>` : ''}
+</body></html>`;
 }
 
 // ---- public entry ----
-export async function buildKeepsakeHTML(options: { debug?: boolean } = {}): Promise<string> {
+export async function buildKeepsakeHTML(options: { debug?: boolean; edit?: boolean } = {}): Promise<string> {
   const key = process.env.ELEVENLABS_API_KEY;
   const agentId = process.env.ELEVENLABS_AGENT_ID ?? 'agent_0501kzf5d5d8eaga0kxsmh0ky1hs';
   const eventTitle = process.env.KEEPSAKE_EVENT_TITLE ?? 'Boots & Hearts 2026';
@@ -268,7 +305,7 @@ ${esc(lines || '  (none)')}
       const c = await getConversation(key, it.id, it.startUnix);
       if (c && c.turns.length) convos.push(c);
     }
-    return renderPage(convos, { eventTitle, chapter, subtitle });
+    return renderPage(convos, { eventTitle, chapter, subtitle, edit: options.edit });
   } catch (err) {
     return renderPage([], { eventTitle, chapter, subtitle: `Couldn't load conversations right now (${esc(String((err as Error).message ?? err))}).` });
   }
